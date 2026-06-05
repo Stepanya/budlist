@@ -13,11 +13,15 @@
     // --- app state ------------------------------------------------------------
     var state = {
         type: 'budget',   // active tab
-        lists: [],        // lists in the current overview
+        lists: [],        // all lists in the current overview (full set)
         list: null,       // currently opened list
-        tasks: []         // tasks of the opened list
+        tasks: [],        // tasks of the opened list
+        query: '',        // list search text
+        page: 1           // current lists page
     };
 
+    var PAGE_SIZE = 20;
+    var pagerInited = false;
     var sortableLists = null;
     var sortableTasks = null;
     var listModal, taskModal;
@@ -66,8 +70,23 @@
         $tab.addClass('is-active');
         moveIndicator($tab.index());
         state.type = type;
+        state.query = ''; $('#listSearch').val('');   // reset search per tab
         showListsScreen();
         loadLists();
+    });
+
+    // =========================================================================
+    // SEARCH (filters the current type's lists by title, debounced)
+    // =========================================================================
+    var searchTimer;
+    $('#listSearch').on('input', function () {
+        var v = this.value;
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(function () {
+            state.query = v;
+            state.page = 1;
+            renderLists();
+        }, 160);
     });
 
     // =========================================================================
@@ -96,10 +115,12 @@
     // LISTS OVERVIEW
     // =========================================================================
     function loadLists() {
+        $('#listsPager').empty();
         var $c = $('#listsContainer').html(
             '<div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>'
         );
         $('#listsEmpty').prop('hidden', true);
+        state.page = 1;
 
         api('GET', '/api/lists/' + state.type).done(function (lists) {
             state.lists = lists;
@@ -110,15 +131,61 @@
         });
     }
 
+    function filteredLists() {
+        var q = (state.query || '').trim().toLowerCase();
+        if (!q) return state.lists;
+        return state.lists.filter(function (l) {
+            return String(l.title).toLowerCase().indexOf(q) !== -1;
+        });
+    }
+
+    // Repaginate + render. paginationjs slices the data and fires the callback
+    // for the active page; we render that page's cards there.
     function renderLists() {
-        var $c = $('#listsContainer').empty();
-        if (!state.lists.length) {
-            $('#listsEmpty').prop('hidden', false);
-        } else {
-            $('#listsEmpty').prop('hidden', true);
-            state.lists.forEach(function (list) { $c.append(buildListCard(list)); });
+        var data = filteredLists();
+
+        if (!data.length) {
+            $('#listsContainer').empty();
+            $('#listsPager').empty();
+            if (pagerInited) { try { $('#listsPager').pagination('destroy'); } catch (e) {} pagerInited = false; }
+            var $e = $('#listsEmpty').prop('hidden', false);
+            if (state.query) {
+                $e.find('p').text('No matches');
+                $e.find('span').text('No lists match your search.');
+            } else {
+                $e.find('p').text('No lists here yet.');
+                $e.find('span').html('Tap <strong>New list</strong> to create one.');
+            }
+            if (sortableLists) { sortableLists.destroy(); sortableLists = null; }
+            return;
         }
-        initListSortable();
+        $('#listsEmpty').prop('hidden', true);
+
+        if (pagerInited) { try { $('#listsPager').pagination('destroy'); } catch (e) {} }
+        var totalPages = Math.ceil(data.length / PAGE_SIZE);
+        var startPage = Math.min(state.page || 1, totalPages) || 1;
+        $('#listsPager').pagination({
+            dataSource: data,
+            pageSize: PAGE_SIZE,
+            pageNumber: startPage,
+            showPrevious: true,
+            showNext: true,
+            pageRange: 2,
+            hideOnlyOnePage: true,
+            callback: function (pageData, pagination) {
+                state.page = pagination.pageNumber;
+                renderListPage(pageData);
+            }
+        });
+        pagerInited = true;
+    }
+
+    function renderListPage(pageData) {
+        var searching = !!(state.query && state.query.trim());
+        var $c = $('#listsContainer').empty().toggleClass('searching', searching);
+        pageData.forEach(function (list) { $c.append(buildListCard(list)); });
+        initListSortable(searching);   // reordering is disabled while searching
+        window.scrollTo({ top: 0 });
     }
 
     function buildListCard(list) {
@@ -171,21 +238,29 @@
         });
     }
 
-    function initListSortable() {
+    function initListSortable(disabled) {
         if (sortableLists) { sortableLists.destroy(); sortableLists = null; }
         var el = document.getElementById('listsContainer');
-        if (!el || !state.lists.length) return;
+        if (!el || disabled) return;          // no drag-reorder while searching
         sortableLists = Sortable.create(el, {
             handle: '.drag-handle',
             animation: 160,
             ghostClass: 'sortable-ghost',
             chosenClass: 'sortable-chosen',
             onEnd: function () {
-                var ids = $('#listsContainer .lcard').map(function () { return $(this).data('id'); }).get();
+                // Only the current page's cards are in the DOM. Splice their new
+                // order back into the full list at this page's offset, then send
+                // the complete id order so positions stay globally correct.
+                var pageIds = $('#listsContainer .lcard').map(function () { return $(this).data('id'); }).get();
+                var offset = (state.page - 1) * PAGE_SIZE;
                 var prev = state.lists.slice();
-                // reorder local cache to match DOM
-                state.lists.sort(function (a, b) { return ids.indexOf(a.id) - ids.indexOf(b.id); });
-                api('PATCH', '/api/lists/reorder', { ids: ids }).fail(function () {
+                var byId = {};
+                state.lists.forEach(function (l) { byId[l.id] = l; });
+                var reordered = pageIds.map(function (id) { return byId[id]; });
+                Array.prototype.splice.apply(state.lists, [offset, reordered.length].concat(reordered));
+
+                var allIds = state.lists.map(function (l) { return l.id; });
+                api('PATCH', '/api/lists/reorder', { ids: allIds }).fail(function () {
                     state.lists = prev;
                     renderLists();
                     toast('Reorder failed — restored', true);
@@ -254,15 +329,56 @@
         $li.append($main);
 
         var amt = Number(t.amount || 0);
-        var $amount = $('<div class="task-amount">');
+        var $amount = $('<div class="task-amount" title="Click to edit price">');
         if (amt > 0) {
             $amount.text(peso(lineTotal(t)));
             if (Number(t.quantity || 1) > 1) {
                 $amount.append($('<span class="task-qty">').text(peso(amt) + ' × ' + t.quantity));
             }
+        } else {
+            $amount.addClass('is-empty');   // shows a clickable "₱ —" placeholder
         }
+        // click the price to edit just the price (unit amount), inline
+        $amount.on('click', function (e) { e.stopPropagation(); startPriceEdit(t, $amount); });
         $li.append($amount);
         return $li;
+    }
+
+    // Inline edit of a task's unit price only (not quantity/note). Optimistic.
+    function startPriceEdit(t, $amount) {
+        if ($amount.find('.amount-input').length) return;   // already editing
+        var current = (t.amount && Number(t.amount)) ? Number(t.amount) : '';
+        var $input = $('<input type="number" step="0.01" inputmode="decimal" class="amount-input">').val(current);
+        $amount.removeClass('is-empty').empty().append($input);
+        $input.trigger('focus').trigger('select');
+
+        var settled = false;
+        function rerender() {
+            $('.task[data-id="' + t.id + '"]').replaceWith(buildTaskRow(t));
+            initTaskSortable();
+            updateTotals();
+        }
+        function commit(save) {
+            if (settled) return;
+            settled = true;
+            var newVal = save ? (parseFloat($input.val()) || 0) : Number(t.amount || 0);
+            if (newVal === Number(t.amount || 0)) { rerender(); return; }   // no change / cancel
+
+            var snapshot = t.amount;
+            t.amount = newVal;                                  // optimistic
+            rerender();
+            if (String(t.id).indexOf('tmp-') === 0) return;     // unsaved task; local only
+            api('PATCH', '/api/tasks/' + t.id, { amount: newVal }).fail(function () {
+                t.amount = snapshot;                            // rollback
+                rerender();
+                toast('Could not save price — reverted', true);
+            });
+        }
+        $input.on('keydown', function (e) {
+            if (e.key === 'Enter') { e.preventDefault(); commit(true); }
+            else if (e.key === 'Escape') { e.preventDefault(); commit(false); }
+        });
+        $input.on('blur', function () { commit(true); });
     }
 
     function formatDue(d) {
@@ -479,7 +595,9 @@
             api('POST', '/api/lists', { list_type: state.type, title: title, budget: budget })
                 .done(function (list) {
                     list.tasks_count = 0; list.items_total = 0; list.done_total = 0;
-                    state.lists.push(list);
+                    state.lists.unshift(list);   // new lists land at the top
+                    state.query = ''; $('#listSearch').val('');
+                    state.page = 1;
                     renderLists();
                     toast('List created');
                 })

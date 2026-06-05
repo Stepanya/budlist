@@ -79,6 +79,10 @@
 
 html, body { height: 100%; }
 
+/* Always reserve the scrollbar gutter so switching between a long tab (with a
+   scrollbar) and a short tab (without) doesn't shift the layout sideways. */
+html { scrollbar-gutter: stable; }
+
 body {
     margin: 0;
     font-family: var(--font-body);
@@ -218,16 +222,41 @@ body {
 @keyframes fade { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 
 .screen-head {
-    display: flex; align-items: center; justify-content: space-between;
-    margin: 4px 6px 12px;
+    display: flex; align-items: center; gap: 10px;
+    margin: 4px 6px 14px;
 }
 .screen-title {
     font-family: var(--font-display);
     font-weight: 600;
     font-size: 1.7rem;
     margin: 0;
+    flex: 0 0 auto;
 }
+/* search bar sits between the title and the New-list button */
+.search-box {
+    flex: 1 1 auto; min-width: 0;
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 13px;
+    border-radius: 999px;
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    -webkit-backdrop-filter: blur(12px) saturate(140%);
+    backdrop-filter: blur(12px) saturate(140%);
+    color: var(--text-muted);
+    transition: border-color .2s, box-shadow .2s;
+}
+.search-box:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.search-input {
+    flex: 1 1 auto; min-width: 0;
+    border: 0; background: transparent; outline: none;
+    color: var(--text); font-family: var(--font-body); font-size: .95rem;
+}
+.search-input::placeholder { color: var(--text-muted); }
+.search-input::-webkit-search-cancel-button { filter: var(--cancel-filter); }
+[data-theme="dark"] .search-input::-webkit-search-cancel-button { filter: invert(.7); }
+
 .btn-pill {
+    flex: 0 0 auto;
     display: inline-flex; align-items: center; gap: 7px;
     border: 1px solid var(--glass-border);
     background: var(--accent-soft);
@@ -241,11 +270,20 @@ body {
 .btn-pill:hover { transform: translateY(-1px); background: var(--accent-soft); }
 .btn-pill svg { color: var(--accent); }
 
+/* On narrow screens collapse "New list" to just the + icon to keep one row. */
+@media (max-width: 560px) {
+    .screen-title { font-size: 1.4rem; }
+    .btn-pill-label { display: none; }
+    .btn-pill { padding: 9px 11px; }
+}
+
 /* ---- list cards ---- */
 /* NOTE: classes are prefixed `lcard` (not `card`) to avoid colliding with
    Bootstrap's own `.card` component, which would force flex-direction:column
    and a dark body color. */
 .cards { display: flex; flex-direction: column; gap: 12px; }
+/* reordering is disabled while a search filter is active */
+.cards.searching .drag-handle { visibility: hidden; }
 .lcard {
     display: flex; flex-direction: row; align-items: center; gap: 14px;
     padding: 16px;
@@ -485,6 +523,45 @@ body {
     background: linear-gradient(90deg, transparent, var(--glass-hi), transparent);
     transform: translateX(-100%); animation: shimmer 1.3s infinite; }
 @keyframes shimmer { to { transform: translateX(100%); } }
+
+/* ---- inline price edit (click the amount in a list to edit just the price) ---- */
+.task-amount { cursor: pointer; border-radius: 8px; padding: 2px 6px; margin: -2px -6px; transition: background .15s; }
+.task-amount:hover { background: var(--accent-soft); }
+.task-amount.is-empty::after { content: "₱ —"; color: var(--text-muted); font-weight: 500; }
+.amount-input {
+    width: 92px; text-align: right;
+    border: 1px solid var(--accent); border-radius: 8px;
+    background: var(--glass-hi); color: var(--text);
+    font-family: var(--font-body); font-size: 1rem; font-weight: 600;
+    padding: 4px 8px; outline: none;
+    box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+/* ---- pagination (paginationjs, themed to the glass UI) ---- */
+.pager { margin-top: 16px; display: flex; justify-content: center; }
+.pager:empty { display: none; }
+.paginationjs { display: flex; justify-content: center; font-family: var(--font-body); }
+.paginationjs .paginationjs-pages ul { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; padding: 0; margin: 0; border: 0; }
+.paginationjs .paginationjs-pages ul li { float: none; border: 0; margin: 0; }
+.paginationjs .paginationjs-pages ul li > a {
+    border: 1px solid var(--glass-border) !important;
+    background: var(--glass-bg) !important;
+    color: var(--text-soft) !important;
+    -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+    min-width: 38px; height: 38px; line-height: 36px;
+    padding: 0 10px; border-radius: 11px !important;
+    font-size: .9rem; font-weight: 600;
+    transition: color .2s, border-color .2s, transform .15s var(--ease);
+}
+.paginationjs .paginationjs-pages ul li > a:hover { color: var(--text) !important; border-color: var(--accent) !important; background: var(--glass-bg) !important; transform: translateY(-1px); }
+.paginationjs .paginationjs-pages ul li.active > a {
+    background: linear-gradient(135deg, var(--accent), var(--accent-2)) !important;
+    border-color: transparent !important;
+    color: var(--accent-contrast) !important;
+    box-shadow: 0 8px 20px -8px var(--accent);
+}
+.paginationjs .paginationjs-pages ul li.disabled > a { opacity: .4; color: var(--text-muted) !important; }
+.paginationjs .paginationjs-pages ul li.paginationjs-ellipsis > a { border: 0 !important; background: transparent !important; }
 
 @media (max-width: 420px) {
     .add-task-amount { width: 78px; }

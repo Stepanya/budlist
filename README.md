@@ -1,59 +1,107 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Budlist
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+A personal budgeting / to-do app with three list types — **Budget**, **Loan**, and **Shopping**.
+Each type holds named lists; each list holds items with a price, quantity, note, and (for loans)
+a due date. Built as a single-page app: every action (switch tab, add, edit, toggle, rename,
+delete, drag-reorder, paginate, search) goes through jQuery `$.ajax` to small JSON endpoints —
+no full-page reloads.
 
-## About Laravel
+## Stack
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+- **Laravel 12** (PHP 8.2)
+- **MySQL**
+- **Bootstrap 5.3.3**, **jQuery 3.7.1**, **SortableJS**, **paginationjs** — all **self-hosted**
+  in `public/vendor/` (no CDN, no npm/Vite build step). Fonts (Fraunces + Outfit) are self-hosted too.
+- Front-end code lives in plain static files: [public/js/app.js](public/js/app.js) and
+  [public/css/app.css](public/css/app.css).
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+## Requirements
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+- PHP **8.2+** with extensions: `pdo_mysql`, `mbstring`, `openssl`, `tokenizer`, `xml`, `ctype`, `json`, `bcmath`, `fileinfo`
+- Composer 2
+- MySQL (local dev was tested with XAMPP MySQL on `127.0.0.1:3306`)
 
-## Learning Laravel
+## Setup & run (local)
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework. You can also check out [Laravel Learn](https://laravel.com/learn), where you will be guided through building a modern Laravel application.
+```bash
+# 1. Install PHP dependencies
+composer install
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+# 2. Create the .env (already MySQL-configured in .env.example) and an app key
+cp .env.example .env        # Windows: copy .env.example .env
+php artisan key:generate
 
-## Laravel Sponsors
+# 3. Create the empty database, then point .env at it
+#    Defaults expected by .env: DB_DATABASE=budlist, DB_USERNAME=root, DB_PASSWORD= (empty), 127.0.0.1:3306
+#    e.g. via the mysql client:
+#        mysql -u root -e "CREATE DATABASE budlist CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+# 4. Run migrations
+php artisan migrate
 
-### Premium Partners
+# 5. (Optional) Import the legacy data from the phpMyAdmin export
+php artisan budlist:import --dry-run   # parse + show counts, writes nothing
+php artisan budlist:import             # import for real (idempotent, preserves IDs)
 
-- **[Vehikl](https://vehikl.com)**
-- **[Tighten Co.](https://tighten.co)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Redberry](https://redberry.international/laravel-development)**
-- **[Active Logic](https://activelogic.com)**
+# 6. Serve
+php artisan serve
+```
 
-## Contributing
+Then open **http://127.0.0.1:8000**.
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+> No front-end build is required — there is no `npm install` / Vite step. The libraries and
+> fonts are committed under `public/vendor/` and served directly.
 
-## Code of Conduct
+## Data import
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+`php artisan budlist:import` maps the legacy two-table structure (`user_lists` / `list_items`)
+from the phpMyAdmin export at `current build/webchat.sql` into the new `lists` / `tasks` schema,
+**preserving original IDs**. It is **idempotent** (upsert by primary key) and verifies that the
+old export counts match the new database (79 lists / 798 tasks / 738 done).
 
-## Security Vulnerabilities
+- `--dry-run` — parse and print counts without touching the database (no DB connection needed).
+- `--file=PATH` — use a different `.sql` export.
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+## Schema
 
-## License
+| `lists` | `tasks` |
+|---|---|
+| `id`, `list_type` (budget/loan/shopping), `title`, `budget`, `position`, timestamps | `id`, `list_id` → lists (cascade), `text`, `amount`, `quantity`, `note`, `due_date`, `done`, `position`, timestamps |
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+Models: `App\Models\TaskList` (→ `lists` table) and `App\Models\Task`.
+
+## API
+
+All routes are under `/api` and use the web middleware group (session + CSRF via the
+`<meta name="csrf-token">` tag + `$.ajaxSetup`).
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET    | `/api/lists/{type}`                   | Lists of a type (with item counts + totals) |
+| POST   | `/api/lists`                          | Create a list (at the top) |
+| POST   | `/api/lists/{list}/duplicate`         | Duplicate a list + its items |
+| PATCH  | `/api/lists/{list}`                   | Rename / set budget |
+| DELETE | `/api/lists/{list}`                   | Delete a list (cascades to its tasks) |
+| PATCH  | `/api/lists/reorder`                  | Persist list order (`{ ids: [...] }`) |
+| GET    | `/api/lists/{list}/tasks`             | Tasks of a list |
+| PATCH  | `/api/lists/{list}/tasks/reorder`     | Persist task order within a list |
+| POST   | `/api/tasks`                          | Add an item |
+| PATCH  | `/api/tasks/{task}`                   | Update an item (toggle done, price, etc.) |
+| DELETE | `/api/tasks/{task}`                   | Delete an item |
+
+## Features
+
+- **Optimistic UI** with rollback on failure for every action.
+- **Light / dark themes** driven entirely by CSS variables, persisted to `localStorage` and
+  applied before first paint (no theme flash). Toggle in the header.
+- **Drag-to-reorder** lists and items (SortableJS), persisted via the reorder endpoints.
+- **Pagination** — 20 lists per page (paginationjs).
+- **Search** — filter the current type's lists by title.
+- **Inline price edit** — click an item's price to edit just the price.
+
+## Notes
+
+- `.env` is gitignored; production credentials are not committed. Configure the production `.env`
+  on the server.
+- `current build/` is the previous version (kept as reference + the source of the data import);
+  it is not part of the running app.

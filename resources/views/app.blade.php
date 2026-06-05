@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>Budlist</title>
+    <link rel="icon" href="{{ asset('favicon.ico') }}" sizes="any">
 
     {{-- Apply the saved theme before first paint to avoid a flash of the wrong theme. --}}
     <script>
@@ -19,15 +20,11 @@
         })();
     </script>
 
-    {{-- Fonts: Fraunces (display) + Outfit (body) --}}
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-
-    {{-- Bootstrap 5.3.3 (CDN, not npm) --}}
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-
-    <link href="{{ asset('css/app.css') }}?v=1" rel="stylesheet">
+    {{-- Self-hosted (no CDN): fonts, Bootstrap 5.3.3, paginationjs, app styles --}}
+    <link href="{{ asset('vendor/css/fonts.css') }}" rel="stylesheet">
+    <link href="{{ asset('vendor/css/bootstrap.min.css') }}" rel="stylesheet">
+    <link href="{{ asset('vendor/css/pagination.css') }}" rel="stylesheet">
+    <link href="{{ asset('css/app.css') }}?v=3" rel="stylesheet">
 </head>
 <body>
     {{-- Ambient background glows --}}
@@ -62,12 +59,17 @@
             <section id="screen-lists" class="screen is-active">
                 <div class="screen-head">
                     <h2 id="listsHeading" class="screen-title">Budget</h2>
+                    <div class="search-box">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+                        <input type="search" id="listSearch" class="search-input" placeholder="Search lists…" autocomplete="off" aria-label="Search lists">
+                    </div>
                     <button id="addListBtn" class="btn-pill" type="button">
                         <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
-                        New list
+                        <span class="btn-pill-label">New list</span>
                     </button>
                 </div>
                 <div id="listsContainer" class="cards"></div>
+                <div id="listsPager" class="pager"></div>
                 <div id="listsEmpty" class="empty-state" hidden>
                     <p>No lists here yet.</p>
                     <span>Tap <strong>New list</strong> to create one.</span>
@@ -184,10 +186,11 @@
     {{-- Toast --}}
     <div id="toast" class="toast-msg" role="status" aria-live="polite"></div>
 
-    {{-- jQuery 3.7.1, Bootstrap 5.3.3 bundle, SortableJS — all CDN --}}
-    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
-    <script src="{{ asset('js/app.js') }}?v=1"></script>
+    {{-- Self-hosted (no CDN): jQuery 3.7.1, Bootstrap 5.3.3 bundle, SortableJS, paginationjs --}}
+    <script src="{{ asset('vendor/js/jquery-3.7.1.min.js') }}"></script>
+    <script src="{{ asset('vendor/js/bootstrap.bundle.min.js') }}"></script>
+    <script src="{{ asset('vendor/js/Sortable.min.js') }}"></script>
+    <script src="{{ asset('vendor/js/pagination.min.js') }}"></script>
+    <script src="{{ asset('js/app.js') }}?v=3"></script>
 </body>
 </html>
