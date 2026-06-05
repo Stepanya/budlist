@@ -6,6 +6,9 @@ a due date. Built as a single-page app: every action (switch tab, add, edit, tog
 delete, drag-reorder, paginate, search) goes through jQuery `$.ajax` to small JSON endpoints —
 no full-page reloads.
 
+The app is gated behind a login. Accounts are confirmed with a one-time code emailed at
+registration, and every list/item is scoped to its owner.
+
 ## Stack
 
 - **Laravel 12** (PHP 8.2)
@@ -47,10 +50,25 @@ php artisan budlist:import             # import for real (idempotent, preserves 
 php artisan serve
 ```
 
-Then open **http://127.0.0.1:8000**.
+Then open **http://127.0.0.1:8000**. You'll be sent to **/login** — use **Create an account** to
+register. The **first** account to verify its OTP inherits all the imported (ownerless) lists;
+anyone who registers after that starts with an empty workspace.
 
 > No front-end build is required — there is no `npm install` / Vite step. The libraries and
 > fonts are committed under `public/vendor/` and served directly.
+
+## Accounts, email OTP & "keep me signed in"
+
+- **Register** (name / email / password) → the app emails a **6-digit code** (valid 10 minutes) →
+  enter it on the verify screen to finish. Unverified accounts can't sign in until they verify.
+- **Email delivery** uses Laravel's mailer. Out of the box `MAIL_MAILER=log`, so the code is
+  written to `storage/logs/laravel.log` (no real email is sent — fine for local testing). To send
+  real OTPs from a personal Gmail, set the `MAIL_*` SMTP values shown in `.env.example` (Gmail
+  needs a **App password**, not your normal password). **Do not commit real mail credentials.**
+- **Keep me signed in** on the login form uses Laravel's remember-me cookie, so you stay logged in
+  across browser restarts for a long time (until you sign out). Leave it unticked for a session
+  that ends when the browser session expires.
+- Sign out with the door icon in the header.
 
 ## Data import
 
@@ -66,14 +84,29 @@ old export counts match the new database (79 lists / 798 tasks / 738 done).
 
 | `lists` | `tasks` |
 |---|---|
-| `id`, `list_type` (budget/loan/shopping), `title`, `budget`, `position`, timestamps | `id`, `list_id` → lists (cascade), `text`, `amount`, `quantity`, `note`, `due_date`, `done`, `position`, timestamps |
+| `id`, `user_id` → users (nullable), `list_type` (budget/loan/shopping), `title`, `budget`, `position`, timestamps | `id`, `list_id` → lists (cascade), `text`, `amount`, `quantity`, `note`, `due_date`, `done`, `position`, timestamps |
 
-Models: `App\Models\TaskList` (→ `lists` table) and `App\Models\Task`.
+`users` also carries `otp_code` + `otp_expires_at` (alongside the stock `email_verified_at`).
+
+Models: `App\Models\TaskList` (→ `lists` table) and `App\Models\Task`. Both apply a global scope so
+every web query is automatically restricted to the signed-in user; new lists are stamped with their
+owner on create. The CLI importer uses the query builder directly, so it is unaffected by the scope.
 
 ## API
 
-All routes are under `/api` and use the web middleware group (session + CSRF via the
-`<meta name="csrf-token">` tag + `$.ajaxSetup`).
+Auth routes (full-page Blade forms, CSRF-protected):
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET / POST | `/login`          | Sign in (`remember` checkbox = persistent login) |
+| GET / POST | `/register`       | Create an account → issues an email OTP |
+| GET / POST | `/verify`         | Enter the 6-digit OTP to verify + sign in |
+| POST       | `/verify/resend`  | Email a fresh OTP |
+| POST       | `/logout`         | Sign out |
+
+The app shell (`/`) and all `/api/*` routes below are behind the `auth` middleware (session + CSRF
+via the `<meta name="csrf-token">` tag + `$.ajaxSetup`). An AJAX call that hits an expired session
+gets a 401/419 and the front-end redirects to `/login`.
 
 | Method | Path | Purpose |
 |---|---|---|
@@ -91,6 +124,8 @@ All routes are under `/api` and use the web middleware group (session + CSRF via
 
 ## Features
 
+- **Accounts with email OTP** — register, verify a 6-digit emailed code, then sign in. Optional
+  persistent "keep me signed in". Data is scoped per user.
 - **Optimistic UI** with rollback on failure for every action.
 - **Light / dark themes** driven entirely by CSS variables, persisted to `localStorage` and
   applied before first paint (no theme flash). Toggle in the header.

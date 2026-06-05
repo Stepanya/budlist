@@ -35,7 +35,10 @@ class TaskController extends Controller
             'done' => ['nullable', 'boolean'],
         ]);
 
-        $data['position'] = (int) Task::where('list_id', $data['list_id'])->max('position') + 1;
+        // findOrFail goes through the owner scope: adding to a list you don't own 404s.
+        $list = TaskList::findOrFail($data['list_id']);
+
+        $data['position'] = (int) Task::where('list_id', $list->id)->max('position') + 1;
 
         $task = Task::create($data);
 

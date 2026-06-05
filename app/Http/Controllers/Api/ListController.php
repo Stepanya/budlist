@@ -20,13 +20,15 @@ class ListController extends Controller
     {
         abort_unless(in_array($type, TaskList::TYPES, true), 404);
 
+        // The outer query is already scoped to the signed-in user (TaskList global
+        // scope), so the per-list totals can drop the redundant task ownership scope.
         $lists = TaskList::query()
             ->where('list_type', $type)
             ->orderBy('position')
             ->withCount('tasks')
-            ->addSelect(['items_total' => Task::selectRaw('COALESCE(SUM(amount * COALESCE(quantity, 1)), 0)')
+            ->addSelect(['items_total' => Task::withoutGlobalScope('owner')->selectRaw('COALESCE(SUM(amount * COALESCE(quantity, 1)), 0)')
                 ->whereColumn('list_id', 'lists.id')])
-            ->addSelect(['done_total' => Task::selectRaw('COALESCE(SUM(amount * COALESCE(quantity, 1)), 0)')
+            ->addSelect(['done_total' => Task::withoutGlobalScope('owner')->selectRaw('COALESCE(SUM(amount * COALESCE(quantity, 1)), 0)')
                 ->whereColumn('list_id', 'lists.id')->where('done', true)])
             ->get();
 

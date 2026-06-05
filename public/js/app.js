@@ -10,6 +10,14 @@
         headers: { 'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content') }
     });
 
+    // If the session expires (or CSRF token goes stale), the server replies 401/419.
+    // Bounce to the login page rather than failing every action silently.
+    $(document).ajaxError(function (event, jqxhr) {
+        if (jqxhr.status === 401 || jqxhr.status === 419) {
+            window.location.href = '/login';
+        }
+    });
+
     // --- app state ------------------------------------------------------------
     var state = {
         type: 'budget',   // active tab
@@ -280,7 +288,9 @@
 
         $('#tasksContainer').html('<div class="skeleton"></div><div class="skeleton"></div>');
         $('#tasksEmpty').prop('hidden', true);
-        $('#taskText').val('').focus();
+        // Do not auto-focus the add field here — on mobile that pops the keyboard
+        // open the moment a list is opened. (We still refocus after an add below.)
+        $('#taskText').val('');
 
         api('GET', '/api/lists/' + list.id + '/tasks').done(function (tasks) {
             state.tasks = tasks;
